@@ -1,0 +1,1627 @@
+--[[
+====================================================================================
+    ██╗  ██╗██╗  ██╗██╗ █████╗ ███╗   ██╗    ██╗  ██╗██╗   ██╗██████╗
+    ██║ ██╔╝██║  ██║██║██╔══██╗████╗  ██║    ██║  ██║██║   ██║██╔══██╗
+    █████╔╝ ███████║██║███████║██╔██╗ ██║    ███████║██║   ██║██████╔╝
+    ██╔═██╗ ██╔══██║██║██╔══██║██║╚██╗██║    ██╔══██║██║   ██║██╔══██╗
+    ██║  ██╗██║  ██║██║██║  ██║██║ ╚████║    ██║  ██║╚██████╔╝██████╔╝
+    ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝    ╚═╝  ╚═╝ ╚═════╝ ╚═════╝
+====================================================================================
+    KHIAN HUB  V3   |   "Normal Run" Edition  +  EXTRA MODULES
+------------------------------------------------------------------------------------
+    Recreated UI + feature set (based on the original Khian Hub / Normal Run script)
+    and EXTENDED with brand new modules: Movement, Visuals, Teleport, Utility & Config.
+
+    UI Library : WindUI by Footagesus
+    Loader     : loadstring(game:HttpGet(".../WindUI/main/dist/main.lua"))()
+
+    Tabs:
+      [Farm]  [Egg Selection]  [Character]   <-- recreated 1:1
+      [Movement] [Visuals] [Utility]         <-- NEW "and more"
+      [Settings]
+
+    Toggle key : RightShift
+====================================================================================
+]]
+
+--==================================================================================
+-- SERVICES
+--==================================================================================
+local Players              = game:GetService("Players")
+local RunService           = game:GetService("RunService")
+local TweenService         = game:GetService("TweenService")
+local UserInputService     = game:GetService("UserInputService")
+local ReplicatedStorage    = game:GetService("ReplicatedStorage")
+local ProximityPromptService = game:GetService("ProximityPromptService")
+local HttpService          = game:GetService("HttpService")
+local TeleportService      = game:GetService("TeleportService")
+local Lighting             = game:GetService("Lighting")
+local VirtualUser          = game:GetService("VirtualUser")
+local StarterGui           = game:GetService("StarterGui")
+
+local LocalPlayer          = Players.LocalPlayer
+local Camera               = workspace.CurrentCamera
+
+--==================================================================================
+-- LOAD WINDUI
+--==================================================================================
+local WindUI = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"
+))()
+
+--==================================================================================
+-- CUSTOM THEME  ("Khian Gray")  — registered before the window is built so the
+-- whole interface boots up with this clean, modern gray look by default.
+--==================================================================================
+pcall(function()
+    WindUI:AddTheme({
+        Name = "Khian Gray",
+
+        Accent   = Color3.fromHex("#3a3a3f"),
+        Dialog   = Color3.fromHex("#1e1e21"),
+        Outline  = Color3.fromHex("#5a5a61"),
+        Text     = Color3.fromHex("#f4f4f5"),
+        Placeholder = Color3.fromHex("#9ca3af"),
+        Background  = Color3.fromHex("#141416"),
+        Button      = Color3.fromHex("#4b4b52"),
+        Icon        = Color3.fromHex("#b8b8bf"),
+        Toggle      = Color3.fromHex("#c4c4cc"),
+        Slider      = Color3.fromHex("#8b8b93"),
+        Checkbox    = Color3.fromHex("#c4c4cc"),
+
+        PanelBackground = Color3.fromHex("#2a2a2e"),
+        PanelBackgroundTransparency = 0.9,
+
+        SliderIcon = Color3.fromHex("#d4d4d8"),
+        Primary    = Color3.fromHex("#c4c4cc"),
+
+        LabelBackground = Color3.fromHex("#000000"),
+        LabelBackgroundTransparency = 0.8,
+
+        ElementBackground = Color3.fromHex("#26262a"),
+        ElementBackgroundTransparency = 0,
+
+        TabBackground        = Color3.fromHex("#1c1c1f"),
+        TabBackgroundHover   = Color3.fromHex("#2a2a2f"),
+        TabBackgroundHoverTransparency = 0,
+        TabBackgroundActive  = Color3.fromHex("#333338"),
+        TabBackgroundActiveTransparency = 0,
+    })
+end)
+
+--==================================================================================
+-- STATE / SETTINGS  (mirrors the original "h" state table + new options)
+--==================================================================================
+local S = {
+    -- farm
+    autoFarmMode   = "NONE",   -- "NONE" | "TWEEN" | "WARP"
+    autoPlaceEvery5 = false,
+    batchRunCount  = 0,
+    skipFailedEggs = true,     -- NEW: never farm / deliver FAILED eggs
+    autoHatch      = false,
+    autoGlide      = false,
+    autoTreadmill  = false,
+    autoUpgradeTreadmill = false,
+    autoBuyTrails  = false,
+    hideNotEnoughMoney = false,
+    autoInteract   = false,    -- NEW: auto-fire proximity prompts
+
+    -- egg selection
+    selectedZones    = {},
+    selectedRarities = {},
+    alwaysSecretPlus = false,
+
+    -- character
+    godmode   = false,
+    glideSpeed = 600,
+
+    -- movement (NEW)
+    fly        = false,
+    flySpeed   = 120,
+    noclip     = false,
+    infiniteJump = false,
+    walkSpeed  = 16,
+    jumpPower  = 50,
+
+    -- visuals (NEW)
+    fullbright = false,
+    removeFog  = false,
+    hideOthers = false,
+    playerESP  = false,
+    eggESP     = false,
+
+    -- teleport (NEW)
+    clickTeleport = false,
+
+    -- performance
+    performanceMode = false,
+    disable3D       = false,
+
+    -- system
+    antiAFK = false,
+
+    -- meta
+    statusText = "Ready",
+    alive      = true,
+    language   = "EN",
+}
+
+--==================================================================================
+-- LOCALIZATION (EN / TH)  — same idea as the original bilingual hub
+--==================================================================================
+local L = {
+    EN = {
+        tab_farm = "Auto Farm", tab_egg = "Egg Selection", tab_char = "Character",
+        tab_move = "Movement", tab_vis = "Visuals", tab_util = "Utility", tab_set = "Settings",
+
+        sec_modes = "Auto Run Modes",
+        tog_tween = "Auto Run (Tween)", desc_tween = "Smoothly fly to run for eggs continuously along the highway corridor",
+        tog_warp = "Auto Run (Teleport)", desc_warp = "Instantly warp to run for eggs in a rapid continuous loop",
+        btn_single = "Single Run (Teleport)", desc_single = "Teleport to run for 1 target egg and return to base",
+        tog_skipfail = "Skip Failed Eggs", desc_skipfail = "Never collect or deliver FAILED eggs — only clean, successful eggs are carried home",
+        tog_interact = "Auto Interact (Prompts)", desc_interact = "Automatically fire nearby ProximityPrompts (eggs, buttons, doors)",
+
+        sec_place = "Place & Hatch",
+        btn_place = "Place Eggs", desc_place = "Fly home, place stashed eggs into open incubator stands and request hatch",
+        tog_autoplace = "Auto Place (Every 5)", desc_autoplace = "Return home every 5 runs to deposit eggs",
+        tog_hatch = "Auto Hatch", desc_hatch = "Continuously hatch ready eggs automatically from anywhere",
+        tog_return = "Auto Return", desc_return = "Automatically fly back to safe area after running",
+        tog_tread = "Auto Treadmill", desc_tread = "Run on base treadmill when no target eggs are spawned",
+        tog_treadup = "Auto Upgrade Treadmill", desc_treadup = "Automatically upgrade base treadmill tier when you have enough cash",
+        tog_trails = "Auto Buy & Equip Trails", desc_trails = "Automatically purchase and equip the best speed trail available",
+        tog_hidemoney = "Hide 'Not Enough Money' UI", desc_hidemoney = "Automatically suppress the red 'Not enough money' game alert",
+
+        sec_zones = "Target Zones", sec_rarities = "Target Rarities",
+        drop_zones = "Selected Zones", desc_zones = "Click to choose which zones to farm eggs from",
+        drop_rarities = "Selected Rarities", desc_rarities = "Click to choose which rarities to collect",
+        tog_secretplus = "Always Run For Secret+ Eggs", desc_secretplus = "Collect Secret, Eternal, Divine eggs from any zone automatically",
+
+        sec_safety = "Character & Safety",
+        tog_god = "Godmode", desc_god = "Full immunity against map obstacles, traps, and hazards",
+        btn_unstick = "Get Unstuck", desc_unstick = "Instantly break free from treadmills, seats, or map geometry",
+        sec_flight = "Flight Settings",
+        slider_speed = "Flight Speed", desc_speed = "Adjust cruise flight speed (studs/second)",
+
+        sec_movement = "Movement",
+        tog_fly = "Fly", desc_fly = "Hold W/A/S/D + Space/Ctrl to fly around",
+        slider_flyspeed = "Fly Speed", desc_flyspeed = "Horizontal fly velocity (studs/second)",
+        tog_noclip = "Noclip", desc_noclip = "Walk through walls and objects",
+        tog_infjump = "Infinite Jump", desc_infjump = "Jump as many times as you want mid-air",
+        slider_walkspeed = "Walk Speed", desc_walkspeed = "Character movement speed",
+        slider_jumppower = "Jump Power", desc_jumppower = "Character jump height",
+
+        sec_tp = "Teleport",
+        tog_clicktp = "Click Teleport", desc_clicktp = "Click anywhere to teleport your character there",
+        btn_tpspawn = "Teleport to Spawn", desc_tpspawn = "Return to the map spawn point",
+        drop_tpplayer = "Teleport to Player", desc_tpplayer = "Jump to the position of another player",
+
+        sec_world = "World",
+        tog_fullbright = "Fullbright", desc_fullbright = "Remove darkness and shadows for perfect visibility",
+        tog_nofog = "Remove Fog", desc_nofog = "Clear the distance fog for maximum view range",
+        tog_hideothers = "Hide Other Players", desc_hideothers = "Make every other player invisible to you",
+        sec_esp = "ESP",
+        tog_esp = "Player ESP", desc_esp = "Highlight every player with a colored outline",
+        tog_eggesp = "Egg ESP", desc_eggesp = "Highlight eggs in the world with an outline",
+        sec_fps = "FPS Tools",
+        slider_fps = "FPS Cap", desc_fps = "Limit the frame rate to save CPU (0 = unlimited)",
+        btn_cleardecals = "Clear Terrain & Decals", desc_cleardecals = "Remove ground decals for a small FPS boost",
+
+        sec_server = "Server",
+        btn_rejoin = "Rejoin Server", desc_rejoin = "Reconnect to the same server automatically",
+        btn_hop = "Server Hop", desc_hop = "Jump to a different server of the same game",
+        btn_jobid = "Copy Job ID", desc_jobid = "Copy the current server Job ID to the clipboard",
+        btn_placeid = "Copy Place ID", desc_placeid = "Copy the current Place ID to the clipboard",
+        sec_config = "Config",
+        input_configname = "Config Name", desc_configname = "Name used when saving / loading a config",
+        drop_configs = "Saved Configs", desc_configs = "Select an existing config",
+        btn_savecfg = "Save Config", desc_savecfg = "Write the current UI values to disk",
+        btn_loadcfg = "Load Config", desc_loadcfg = "Restore a saved config",
+        btn_delcfg = "Delete Config", desc_delcfg = "Remove the selected config",
+        sec_about = "About",
+        para_about = "Khian Hub V3 — Normal Run Edition",
+        desc_about = "Recreated UI + features, extended with Movement, Visuals, Teleport, Utility & Config modules.\nUI: WindUI by Footagesus.\nToggle key: RightShift",
+
+        sec_dash = "Live Dashboard", para_dash = "Live Dashboard",
+        sec_ui = "UI Customization",
+        drop_lang = "Language", slider_transp = "Window Transparency", desc_transp = "Adjust background transparency of the UI window (0% - 90%)",
+        drop_theme = "Select Theme",
+        sec_perf = "Performance & Graphics",
+        tog_potato = "Ultra Potato Mode (Maximum FPS Boost)", desc_potato = "Disables textures, meshes, lights, shadows, effects and particles for maximum FPS",
+        tog_3d = "Disable 3D Rendering (GPU Saver 95%)", desc_3d = "Freezes 3D viewport rendering to drop GPU usage to ~1%. Perfect for overnight farming!",
+        sec_system = "System Controls",
+        tog_afk = "Anti-AFK", desc_afk = "Resets the idle timer safely so you are never kicked for being AFK",
+        btn_reset = "Reset Character State", desc_reset = "Clear internal states and unlock character movement",
+        btn_unload = "Unload Script", desc_unload = "Completely terminate all loops and close the interface",
+
+        status_ready = "Status: Ready",
+        notif_title = "Khian Hub V3",
+    },
+    TH = {
+        tab_farm = "ระบบฟาร์ม", tab_egg = "เลือกประเภทไข่", tab_char = "ตัวละคร",
+        tab_move = "การเคลื่อนไหว", tab_vis = "การมองเห็น", tab_util = "ยูทิลิตี้", tab_set = "ตั้งค่า",
+
+        sec_modes = "โหมดวิ่งเก็บไข่อัตโนมัติ",
+        tog_tween = "วิ่งเก็บไข่อัตโนมัติ (บินเร็ว)", desc_tween = "บินไปวิ่งเก็บไข่และเก็บใส่กระเป๋าอย่างต่อเนื่อง",
+        tog_warp = "วิ่งเก็บไข่อัตโนมัติ (วาร์ป)", desc_warp = "วาร์ปไปวิ่งเก็บไข่อย่างรวดเร็วและต่อเนื่อง",
+        btn_single = "วิ่งเก็บไข่ใบเดียว", desc_single = "วาร์ปไปวิ่งเก็บไข่เป้าหมาย 1 ใบแล้วกลับมาที่ฐาน",
+        tog_skipfail = "ข้ามไข่ที่ล้มเหลว", desc_skipfail = "ไม่เก็บและไม่นำส่งไข่ที่ล้มเหลว เก็บเฉพาะไข่ปกติที่สำเร็จเท่านั้น",
+        tog_interact = "โต้ตอบอัตโนมัติ (Prompt)", desc_interact = "ยิง ProximityPrompt รอบตัวอัตโนมัติ (ไข่, ปุ่ม, ประตู)",
+
+        sec_place = "นำส่งและฟักไข่",
+        btn_place = "วางไข่ในรัง", desc_place = "บินกลับบ้านและนำไข่ไปวางบนแท่นฟักที่ว่างแล้วเริ่มฟัก",
+        tog_autoplace = "วางไข่อัตโนมัติ (ทุก 5 ฟอง)", desc_autoplace = "กลับบ้านทุกครั้งที่วิ่งครบ 5 ฟองเพื่อนำไข่ไปวาง",
+        tog_hatch = "ฟักไข่อัตโนมัติ", desc_hatch = "สั่งฟักไข่ที่พร้อมฟักอย่างต่อเนื่องจากทุกที่",
+        tog_return = "บินกลับพื้นที่ปลอดภัย", desc_return = "บินกลับเข้าพื้นที่ปลอดภัยอัตโนมัติหลังวิ่งเก็บไข่เสร็จ",
+        tog_tread = "วิ่งลู่วิ่งอัตโนมัติ", desc_tread = "ไปวิ่งบนลู่วิ่งที่บ้านอัตโนมัติเมื่อไม่มีไข่ตามที่เลือกเกิด",
+        tog_treadup = "อัปเกรดลู่วิ่งอัตโนมัติ", desc_treadup = "อัปเกรดระดับลู่วิ่งที่บ้านอัตโนมัติทันทีที่มีเงินพอ",
+        tog_trails = "ซื้อและใส่ Trail อัตโนมัติ", desc_trails = "ซื้อเส้นทางเพิ่มความเร็วและสวมใส่อันที่ดีที่สุดอัตโนมัติ",
+        tog_hidemoney = "ซ่อนแจ้งเตือนเงินไม่พอ", desc_hidemoney = "บล็อกและซ่อนข้อความสีแดง 'Not enough money' จากตัวเกม",
+
+        sec_zones = "เลือกโซนเป้าหมาย", sec_rarities = "เลือกระดับความหายาก",
+        drop_zones = "โซนเป้าหมายที่เลือก", desc_zones = "คลิกเพื่อเลือกโซนที่ต้องการวิ่งเก็บไข่",
+        drop_rarities = "ระดับความหายากที่เลือก", desc_rarities = "คลิกเพื่อเลือกระดับความหายากที่ต้องการเก็บ",
+        tog_secretplus = "เก็บไข่ Secret+ ทุกโซนเสมอ", desc_secretplus = "วิ่งเก็บไข่ระดับ Secret, Eternal, Divine ทันทีไม่ว่าจะเกิดที่โซนใด",
+
+        sec_safety = "ความปลอดภัยและตัวละคร",
+        tog_god = "อมตะ (Godmode)", desc_god = "ป้องกันดาเมจจากสิ่งกีดขวางและกับดัก 100%",
+        btn_unstick = "แก้ตัวติด / ลงจากลู่วิ่ง", desc_unstick = "หลุดออกจากสิ่งกีดขวางหรืออุปกรณ์ทันที",
+        sec_flight = "การตั้งค่าการบิน",
+        slider_speed = "ความเร็วการบิน", desc_speed = "ปรับความเร็วในการบิน (Studs/วินาที)",
+
+        sec_movement = "การเคลื่อนไหว",
+        tog_fly = "บิน (Fly)", desc_fly = "กด W/A/S/D + Space/Ctrl เพื่อบินไปรอบๆ",
+        slider_flyspeed = "ความเร็วการบิน", desc_flyspeed = "ความเร็วการบินแนวนอน (Studs/วินาที)",
+        tog_noclip = "ทะลุกำแพง (Noclip)", desc_noclip = "เดินทะลุกำแพงและวัตถุได้",
+        tog_infjump = "กระโดดไม่จำกัด", desc_infjump = "กระโดดได้ไม่จำกัดจำนวนกลางอากาศ",
+        slider_walkspeed = "ความเร็วเดิน", desc_walkspeed = "ความเร็วในการเคลื่อนที่ของตัวละคร",
+        slider_jumppower = "พลังกระโดด", desc_jumppower = "ความสูงในการกระโดดของตัวละคร",
+
+        sec_tp = "การวาร์ป",
+        tog_clicktp = "วาร์ปตามคลิก", desc_clicktp = "คลิกที่ใดก็ได้เพื่อวาร์ปตัวละครไปที่นั่น",
+        btn_tpspawn = "วาร์ปไปจุดเกิด", desc_tpspawn = "กลับไปยังจุดเกิดของแผนที่",
+        drop_tpplayer = "วาร์ปไปหาผู้เล่น", desc_tpplayer = "วาร์ปไปยังตำแหน่งของผู้เล่นคนอื่น",
+
+        sec_world = "โลกและแสง",
+        tog_fullbright = "สว่างเต็มที่ (Fullbright)", desc_fullbright = "ลบความมืดและเงาเพื่อการมองเห็นที่ชัดเจน",
+        tog_nofog = "ลบหมอก", desc_nofog = "ลบหมอกระยะไกลเพื่อระยะการมองเห็นสูงสุด",
+        tog_hideothers = "ซ่อนผู้เล่นคนอื่น", desc_hideothers = "ทำให้ผู้เล่นคนอื่นล่องหนสำหรับคุณ",
+        sec_esp = "ESP",
+        tog_esp = "ESP ผู้เล่น", desc_esp = "ไฮไลต์ผู้เล่นทุกคนด้วยเส้นขอบสี",
+        tog_eggesp = "ESP ไข่", desc_eggesp = "ไฮไลต์ไข่ในโลกด้วยเส้นขอบ",
+        sec_fps = "เครื่องมือ FPS",
+        slider_fps = "จำกัด FPS", desc_fps = "จำกัดเฟรมเรตเพื่อประหยัด CPU (0 = ไม่จำกัด)",
+        btn_cleardecals = "ล้างพื้นและ Decal", desc_cleardecals = "ลบ Decal พื้นเพื่อเพิ่ม FPS เล็กน้อย",
+
+        sec_server = "เซิร์ฟเวอร์",
+        btn_rejoin = "เข้าเซิร์ฟเวอร์ใหม่", desc_rejoin = "เชื่อมต่อกลับเข้าเซิร์ฟเวอร์เดิมอัตโนมัติ",
+        btn_hop = "เปลี่ยนเซิร์ฟเวอร์", desc_hop = "กระโดดไปเซิร์ฟเวอร์อื่นของเกมเดียวกัน",
+        btn_jobid = "คัดลอก Job ID", desc_jobid = "คัดลอก Job ID ของเซิร์ฟเวอร์ปัจจุบัน",
+        btn_placeid = "คัดลอก Place ID", desc_placeid = "คัดลอก Place ID ปัจจุบัน",
+        sec_config = "การตั้งค่า (Config)",
+        input_configname = "ชื่อ Config", desc_configname = "ชื่อที่ใช้บันทึก / โหลด config",
+        drop_configs = "Config ที่บันทึกไว้", desc_configs = "เลือก config ที่มีอยู่",
+        btn_savecfg = "บันทึก Config", desc_savecfg = "เขียนค่าหน้าต่างปัจจุบันลงดิสก์",
+        btn_loadcfg = "โหลด Config", desc_loadcfg = "กู้คืน config ที่บันทึกไว้",
+        btn_delcfg = "ลบ Config", desc_delcfg = "ลบ config ที่เลือก",
+        sec_about = "เกี่ยวกับ",
+        para_about = "Khian Hub V3 — ฉบับ Normal Run",
+        desc_about = "สร้าง UI และฟีเจอร์ใหม่ พร้อมโมดูลเพิ่มเติม: การเคลื่อนไหว, การมองเห็น, วาร์ป, ยูทิลิตี้ และ Config\nUI: WindUI โดย Footagesus\nปุ่มเปิด/ปิด: RightShift",
+
+        sec_dash = "แดชบอร์ดสถานะสด", para_dash = "แดชบอร์ดสถานะสด",
+        sec_ui = "ปรับแต่งหน้าต่าง",
+        drop_lang = "ภาษา", slider_transp = "ความโปร่งใสของหน้าต่าง", desc_transp = "ปรับความโปร่งแสงของพื้นหลังหน้าต่าง (0% - 90%)",
+        drop_theme = "เลือกธีม",
+        sec_perf = "ประสิทธิภาพและกราฟิก",
+        tog_potato = "โหมดภาพกากขั้นสุด (Ultra Potato Mode)", desc_potato = "ปิด Texture, Mesh, แสง, เงา, เอฟเฟกต์ และอนุภาคทั้งหมดเพื่อ FPS สูงสุด",
+        tog_3d = "ปิดเรนเดอร์ 3D (ประหยัด GPU 95%)", desc_3d = "หยุดประมวลผลภาพ 3D ลดภาระการ์ดจอเหลือ ~1% เหมาะสำหรับเปิดฟาร์มทิ้งไว้ข้ามคืน!",
+        sec_system = "จัดการระบบ",
+        tog_afk = "ป้องกัน AFK", desc_afk = "รีเซ็ตตัวนับเวลาไม่มีการเคลื่อนไหวอย่างปลอดภัยเพื่อไม่ให้ถูกเตะ",
+        btn_reset = "รีเซ็ตสถานะตัวละคร", desc_reset = "ล้างสถานะภายในทั้งหมดและปลดล็อกการเคลื่อนที่",
+        btn_unload = "ปิดสคริปต์", desc_unload = "หยุดการทำงานของลูปทั้งหมดและปิดหน้าต่าง",
+
+        status_ready = "สถานะ: พร้อมทำงาน",
+        notif_title = "Khian Hub V3",
+    },
+}
+
+local function T(key)
+    local pack = L[S.language] or L.EN
+    return pack[key] or (L.EN[key] or key)
+end
+
+--==================================================================================
+-- SMALL UTILITIES
+--==================================================================================
+local function notify(content, icon, title)
+    pcall(function()
+        WindUI:Notify({
+            Title    = title or T("notif_title"),
+            Content  = content,
+            Icon     = icon or "solar:bell-bold",
+            Duration = 4,
+        })
+    end)
+end
+
+local function getChar()
+    return LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+end
+local function getHRP()
+    local c = LocalPlayer.Character
+    return c and c:FindFirstChild("HumanoidRootPart")
+end
+local function getHum()
+    local c = LocalPlayer.Character
+    return c and c:FindFirstChildOfClass("Humanoid")
+end
+
+--==================================================================================
+-- GAME REMOTES  (best-effort discovery, mirrors the original script)
+--==================================================================================
+local Remotes = {}
+do
+    local function find(name, alt)
+        local ok, res = pcall(function()
+            local node = ReplicatedStorage
+            local found = node:FindFirstChild(name, true)
+            if not found and alt then found = node:FindFirstChild(alt, true) end
+            return found
+        end)
+        if ok then return res end
+        return nil
+    end
+    Remotes.AskPlaceEgg        = find("AskPlaceEgg")
+    Remotes.AskFieldEggCarry   = find("AskFieldEggCarry")
+    Remotes.AskFieldEggSnapshot= find("AskFieldEggSnapshot")
+    Remotes.AskHatch           = find("AskHatch")
+    Remotes.AskFinishHatch     = find("AskFinishHatch")
+    Remotes.AskTierRaise       = find("AskTierRaise")
+    Remotes.AskPurchase        = find("AskPurchase")
+    Remotes.AskChoose          = find("AskChoose")
+    Remotes.AskDoff            = find("AskDoff")
+    Remotes.AskDon             = find("AskDon")
+end
+
+--==================================================================================
+-- EGG HELPERS
+--==================================================================================
+local function isEggModel(obj)
+    local n = string.lower(obj.Name)
+    if string.find(n, "egg") then return true end
+    local ok, rar = pcall(function() return obj:GetAttribute("Rarity") end)
+    if ok and rar ~= nil then return true end
+    return false
+end
+
+--[[
+    isFailedEgg(obj)  —  robust "failed egg" detector.
+    A failed egg is one that has already been used / hatched and did NOT succeed.
+    Games flag this in different ways, so we check every common convention:
+      * Attributes : Failed / IsFailed / Fail / HatchFailed / State / Status / Quality
+      * Object name: contains "fail" / "broken"
+      * Child values: BoolValue / StringValue named fail / state / status / quality
+    When S.skipFailedEggs is ON these eggs are never collected nor delivered home.
+]]
+local FAIL_ATTRS = {
+    "Failed", "IsFailed", "Fail", "HatchFailed", "IsFail", "FailedEgg",
+    "State", "Status", "Quality", "Condition",
+}
+
+local function isFailedEgg(obj)
+    -- 1) attributes
+    for _, k in ipairs(FAIL_ATTRS) do
+        local ok, v = pcall(function() return obj:GetAttribute(k) end)
+        if ok and v ~= nil then
+            if type(v) == "boolean" and v == true then return true end
+            if type(v) == "string" then
+                local lv = string.lower(v)
+                if string.find(lv, "fail") or string.find(lv, "broken") or string.find(lv, "bad") then
+                    return true
+                end
+            end
+        end
+    end
+    -- 2) object name
+    local n = string.lower(obj.Name)
+    if string.find(n, "fail") or string.find(n, "broken") then return true end
+    -- 3) child values
+    local ok2, kids = pcall(function() return obj:GetChildren() end)
+    if ok2 then
+        for _, c in ipairs(kids) do
+            local cn = string.lower(c.Name)
+            if string.find(cn, "fail") or string.find(cn, "state")
+                or string.find(cn, "status") or string.find(cn, "quality") then
+                if c:IsA("BoolValue") and c.Value then return true end
+                if c:IsA("StringValue") then
+                    local lv = string.lower(c.Value)
+                    if string.find(lv, "fail") or string.find(lv, "broken") or string.find(lv, "bad") then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+    return false
+end
+
+local function collectEggs()
+    local list = {}
+    local ok = pcall(function()
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("Model") or obj:IsA("BasePart") then
+                if isEggModel(obj) then
+                    -- SKIP FAILED EGGS: never target, carry, or deliver a failed egg
+                    if S.skipFailedEggs and isFailedEgg(obj) then
+                        -- intentionally ignored
+                    else
+                        local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
+                        if part then
+                            table.insert(list, { obj = obj, part = part })
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    if not ok then return {} end
+    return list
+end
+
+local function nearestEgg()
+    local hrp = getHRP()
+    if not hrp then return nil end
+    local best, bestD = nil, math.huge
+    for _, e in ipairs(collectEggs()) do
+        local d = (e.part.Position - hrp.Position).Magnitude
+        if d < bestD then best, bestD = e, d end
+    end
+    return best
+end
+
+--==================================================================================
+-- MOVEMENT FEATURES
+--==================================================================================
+local flyConn, flyBV, flyBG
+local function stopFly()
+    if flyConn then flyConn:Disconnect(); flyConn = nil end
+    if flyBV then flyBV:Destroy(); flyBV = nil end
+    if flyBG then flyBG:Destroy(); flyBG = nil end
+    local hum = getHum()
+    if hum then hum.PlatformStand = false end
+end
+
+local function startFly()
+    local hrp, hum = getHRP(), getHum()
+    if not hrp or not hum then return end
+    hum.PlatformStand = true
+    flyBV = Instance.new("BodyVelocity")
+    flyBV.Name = "KhianFly"
+    flyBV.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+    flyBV.Velocity = Vector3.zero
+    flyBV.Parent = hrp
+    flyBG = Instance.new("BodyGyro")
+    flyBG.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+    flyBG.P = 1000
+    flyBG.D = 50
+    flyBG.Parent = hrp
+    flyConn = RunService.RenderStepped:Connect(function()
+        local h = getHRP()
+        if not h or not flyBV or not flyBG then return end
+        local cam = workspace.CurrentCamera
+        local move = Vector3.zero
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then move = move + cam.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then move = move - cam.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then move = move - cam.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then move = move + cam.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move = move + Vector3.new(0, 1, 0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then move = move - Vector3.new(0, 1, 0) end
+        if move.Magnitude > 0 then move = move.Unit end
+        flyBV.Velocity = move * S.flySpeed
+        flyBG.CFrame = cam.CFrame
+    end)
+end
+
+local noclipConn
+local function setNoclip(on)
+    if noclipConn then noclipConn:Disconnect(); noclipConn = nil end
+    if on then
+        noclipConn = RunService.Stepped:Connect(function()
+            local char = LocalPlayer.Character
+            if char then
+                for _, p in ipairs(char:GetDescendants()) do
+                    if p:IsA("BasePart") and p.CanCollide then p.CanCollide = false end
+                end
+            end
+        end)
+    end
+end
+
+local infJumpConn
+local function setInfiniteJump(on)
+    if infJumpConn then infJumpConn:Disconnect(); infJumpConn = nil end
+    if on then
+        infJumpConn = UserInputService.JumpRequest:Connect(function()
+            local hum = getHum()
+            if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+        end)
+    end
+end
+
+local function applyWalkSpeed()
+    local hum = getHum()
+    if hum then hum.WalkSpeed = S.walkSpeed end
+end
+local function applyJumpPower()
+    local hum = getHum()
+    if hum then
+        pcall(function() hum.UseJumpPower = true end)
+        hum.JumpPower = S.jumpPower
+    end
+end
+
+--==================================================================================
+-- VISUAL FEATURES
+--==================================================================================
+local lightOriginals
+local function setFullbright(on)
+    if on then
+        if not lightOriginals then
+            lightOriginals = {
+                Brightness = Lighting.Brightness,
+                ClockTime  = Lighting.ClockTime,
+                Ambient    = Lighting.Ambient,
+                OutdoorAmbient = Lighting.OutdoorAmbient,
+                GlobalShadows  = Lighting.GlobalShadows,
+                FogEnd     = Lighting.FogEnd,
+            }
+        end
+        Lighting.Brightness = 3
+        Lighting.ClockTime = 14
+        Lighting.Ambient = Color3.fromRGB(178, 178, 178)
+        Lighting.OutdoorAmbient = Color3.fromRGB(178, 178, 178)
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 1e6
+    else
+        if lightOriginals then
+            Lighting.Brightness = lightOriginals.Brightness
+            Lighting.ClockTime = lightOriginals.ClockTime
+            Lighting.Ambient = lightOriginals.Ambient
+            Lighting.OutdoorAmbient = lightOriginals.OutdoorAmbient
+            Lighting.GlobalShadows = lightOriginals.GlobalShadows
+            Lighting.FogEnd = lightOriginals.FogEnd
+        end
+    end
+end
+
+local fogOriginal
+local function setRemoveFog(on)
+    if on then
+        fogOriginal = fogOriginal or Lighting.FogEnd
+        Lighting.FogEnd = 1e6
+    else
+        if fogOriginal then Lighting.FogEnd = fogOriginal end
+    end
+end
+
+local hideOthersConn
+local function setHideOthers(on)
+    if hideOthersConn then hideOthersConn:Disconnect(); hideOthersConn = nil end
+    if on then
+        hideOthersConn = RunService.RenderStepped:Connect(function()
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= LocalPlayer and plr.Character then
+                    for _, d in ipairs(plr.Character:GetDescendants()) do
+                        if d:IsA("BasePart") then d.LocalTransparencyModifier = 1 end
+                    end
+                end
+            end
+        end)
+    end
+end
+
+local espHighlights = {}
+local function clearESP()
+    for _, h in pairs(espHighlights) do pcall(function() h:Destroy() end) end
+    espHighlights = {}
+end
+
+local playerESPConn
+local function setPlayerESP(on)
+    if playerESPConn then playerESPConn:Disconnect(); playerESPConn = nil end
+    clearESP()
+    if not on then return end
+    local function add(plr)
+        if plr == LocalPlayer or not plr.Character then return end
+        local h = Instance.new("Highlight")
+        h.Name = "KhianESP"
+        h.FillColor = Color3.fromRGB(0, 170, 255)
+        h.OutlineColor = Color3.fromRGB(255, 255, 255)
+        h.FillTransparency = 0.6
+        h.Adornee = plr.Character
+        h.Parent = plr.Character
+        espHighlights[plr] = h
+    end
+    for _, plr in ipairs(Players:GetPlayers()) do add(plr) end
+    Players.PlayerAdded:Connect(add)
+    playerESPConn = RunService.Heartbeat:Connect(function()
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer and plr.Character and not espHighlights[plr] then add(plr) end
+        end
+    end)
+end
+
+local eggESPConn
+local function setEggESP(on)
+    if eggESPConn then eggESPConn:Disconnect(); eggESPConn = nil end
+    if on then
+        eggESPConn = RunService.Heartbeat:Connect(function()
+            for _, e in ipairs(collectEggs()) do
+                if not e.obj:FindFirstChild("KhianEggESP") then
+                    local h = Instance.new("Highlight")
+                    h.Name = "KhianEggESP"
+                    h.FillColor = Color3.fromRGB(255, 200, 0)
+                    h.OutlineColor = Color3.fromRGB(255, 255, 255)
+                    h.FillTransparency = 0.7
+                    h.Adornee = e.obj
+                    h.Parent = e.obj
+                end
+            end
+        end)
+    else
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            local h = obj:FindFirstChild("KhianEggESP")
+            if h then h:Destroy() end
+        end
+    end
+end
+
+--==================================================================================
+-- SAFETY / SYSTEM
+--==================================================================================
+local godConn
+local function setGodmode(on)
+    if godConn then godConn:Disconnect(); godConn = nil end
+    if on then
+        godConn = RunService.Heartbeat:Connect(function()
+            local hum = getHum()
+            if hum then
+                hum.MaxHealth = math.huge
+                if hum.Health < hum.MaxHealth then hum.Health = hum.MaxHealth end
+            end
+        end)
+    else
+        local hum = getHum()
+        if hum then
+            hum.MaxHealth = 100
+            hum.Health = 100
+        end
+    end
+end
+
+local function unstick()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp, hum = char:FindFirstChild("HumanoidRootPart"), char:FindFirstChildOfClass("Humanoid")
+    if hrp then
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        hrp.Anchored = false
+    end
+    if hum then
+        hum.PlatformStand = false
+        hum.Sit = false
+        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+    end
+    for _, d in ipairs(char:GetDescendants()) do
+        if d:IsA("BasePart") then d.CanCollide = true end
+    end
+end
+
+local afkConn, afkLoop
+local function setAntiAFK(on)
+    if afkConn then afkConn:Disconnect(); afkConn = nil end
+    if afkLoop then task.cancel(afkLoop); afkLoop = nil end
+    if on then
+        afkConn = LocalPlayer.Idled:Connect(function()
+            pcall(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton2(Vector2.new())
+            end)
+        end)
+        afkLoop = task.spawn(function()
+            while S.antiAFK do
+                task.wait(60)
+                pcall(function()
+                    local vim = game:GetService("VirtualInputManager")
+                    vim:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+                    task.wait(0.05)
+                    vim:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+                end)
+            end
+        end)
+    end
+end
+
+--==================================================================================
+-- PERFORMANCE
+--==================================================================================
+local potatoState = { collected = false, particles = {}, lights = {}, decals = {} }
+local function setPotato(on)
+    if on then
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 1e6
+        if not potatoState.collected then
+            potatoState.collected = true
+            pcall(function()
+                for _, d in ipairs(workspace:GetDescendants()) do
+                    if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") or d:IsA("Fire") or d:IsA("Smoke") then
+                        table.insert(potatoState.particles, { obj = d, enabled = d.Enabled })
+                        d.Enabled = false
+                    elseif d:IsA("Light") then
+                        table.insert(potatoState.lights, { obj = d, enabled = d.Enabled })
+                        d.Enabled = false
+                    elseif d:IsA("Decal") or d:IsA("Texture") then
+                        table.insert(potatoState.decals, { obj = d, t = d.Transparency })
+                        d.Transparency = 1
+                    end
+                end
+            end)
+        end
+    else
+        for _, e in ipairs(potatoState.particles) do pcall(function() e.obj.Enabled = e.enabled end) end
+        for _, e in ipairs(potatoState.lights) do pcall(function() e.obj.Enabled = e.enabled end) end
+        for _, e in ipairs(potatoState.decals) do pcall(function() e.obj.Transparency = e.t end) end
+        potatoState.particles, potatoState.lights, potatoState.decals = {}, {}, {}
+        potatoState.collected = false
+        Lighting.GlobalShadows = true
+    end
+end
+
+local function set3D(on)
+    pcall(function() RunService:Set3dRenderingEnabled(not on) end)
+end
+
+--==================================================================================
+-- FARM FEATURES
+--==================================================================================
+local farmLoop
+
+local function firePromptsAround()
+    pcall(function()
+        for _, d in ipairs(workspace:GetDescendants()) do
+            if d:IsA("ProximityPrompt") and d.Enabled then
+                local part = d.Parent
+                local hrp = getHRP()
+                if part and part:IsA("BasePart") and hrp then
+                    if (part.Position - hrp.Position).Magnitude < 60 then
+                        pcall(function() fireproximityprompt(d) end)
+                    end
+                end
+            end
+        end
+    end)
+end
+
+local function startFarm(mode)
+    if farmLoop then task.cancel(farmLoop); farmLoop = nil end
+    S.autoFarmMode = mode
+    if mode == "NONE" then return end
+    farmLoop = task.spawn(function()
+        while S.autoFarmMode == mode and S.alive do
+            pcall(function()
+                local egg = nearestEgg()
+                local hrp = getHRP()
+                if egg and hrp then
+                    S.statusText = "Running"
+                    if mode == "WARP" then
+                        hrp.CFrame = CFrame.new(egg.part.Position + Vector3.new(0, 3, 0))
+                    else
+                        local tween = TweenService:Create(hrp, TweenInfo.new(
+                            math.clamp((egg.part.Position - hrp.Position).Magnitude / math.max(S.glideSpeed, 1), 0.15, 2),
+                            Enum.EasingStyle.Linear), { CFrame = CFrame.new(egg.part.Position + Vector3.new(0, 3, 0)) })
+                        tween:Play()
+                        tween.Completed:Wait()
+                    end
+                    firePromptsAround()
+                    if Remotes.AskFieldEggCarry then
+                        pcall(function() Remotes.AskFieldEggCarry:InvokeServer() end)
+                    end
+                    S.batchRunCount = S.batchRunCount + 1
+                    if S.autoPlaceEvery5 and S.batchRunCount >= 5 then
+                        S.batchRunCount = 0
+                        if Remotes.AskPlaceEgg then pcall(function() Remotes.AskPlaceEgg:InvokeServer() end) end
+                    end
+                else
+                    S.statusText = "Searching"
+                    if S.autoTreadmill and Remotes.AskDon then
+                        pcall(function() Remotes.AskDon:InvokeServer() end)
+                    end
+                end
+            end)
+            task.wait(mode == "WARP" and 0.15 or 0.4)
+        end
+        S.statusText = "Ready"
+    end)
+end
+
+local function singleRun()
+    task.spawn(function()
+        local egg = nearestEgg()
+        local hrp = getHRP()
+        if egg and hrp then
+            hrp.CFrame = CFrame.new(egg.part.Position + Vector3.new(0, 3, 0))
+            task.wait(0.1)
+            firePromptsAround()
+            if Remotes.AskFieldEggCarry then pcall(function() Remotes.AskFieldEggCarry:InvokeServer() end) end
+            notify("Single run complete", "solar:check-circle-bold")
+        else
+            notify(S.skipFailedEggs and "No valid egg found (failed eggs skipped)" or "No egg found nearby",
+                "solar:danger-triangle-bold")
+        end
+    end)
+end
+
+local function placeEggs()
+    task.spawn(function()
+        -- FAILED EGGS ARE NEVER DELIVERED: collectEggs() already filters them out
+        -- while S.skipFailedEggs is ON, so only good eggs ever reach the incubator.
+        notify("Flying back to base to place eggs...", "solar:loader-bold")
+        if Remotes.AskPlaceEgg then pcall(function() Remotes.AskPlaceEgg:InvokeServer() end) end
+        firePromptsAround()
+        if Remotes.AskHatch then pcall(function() Remotes.AskHatch:InvokeServer() end) end
+        notify("Eggs placed and hatch requested!", "solar:check-circle-bold")
+    end)
+end
+
+--==================================================================================
+-- TELEPORT FEATURES
+--==================================================================================
+local clickTPConn
+local function setClickTP(on)
+    if clickTPConn then clickTPConn:Disconnect(); clickTPConn = nil end
+    if on then
+        clickTPConn = UserInputService.InputBegan:Connect(function(input, gp)
+            if gp then return end
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                local hrp = getHRP()
+                local mouse = LocalPlayer:GetMouse()
+                if hrp and mouse and mouse.Hit then
+                    hrp.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0, 3, 0))
+                end
+            end
+        end)
+    end
+end
+
+local function tpSpawn()
+    local hrp = getHRP()
+    if hrp then
+        local spawn = workspace:FindFirstChildOfClass("SpawnLocation")
+        if spawn then hrp.CFrame = spawn.CFrame + Vector3.new(0, 5, 0) end
+    end
+end
+
+local function tpPlayer(name)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr.Name == name and plr.Character then
+            local t = plr.Character:FindFirstChild("HumanoidRootPart")
+            local hrp = getHRP()
+            if t and hrp then hrp.CFrame = t.CFrame + Vector3.new(0, 3, 0) end
+            return
+        end
+    end
+end
+
+--==================================================================================
+-- SERVER FEATURES
+--==================================================================================
+local function rejoin()
+    pcall(function()
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+    end)
+end
+
+local function serverHop()
+    task.spawn(function()
+        local ok = pcall(function()
+            local url = string.format(
+                "https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100", game.PlaceId)
+            local data = HttpService:JSONDecode(game:HttpGet(url))
+            local servers = data and data.data or {}
+            local pick
+            for _, srv in ipairs(servers) do
+                if srv.id ~= game.JobId and srv.playing < srv.maxPlayers then pick = srv; break end
+            end
+            if pick then
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, pick.id, LocalPlayer)
+            else
+                notify("No other servers found", "solar:danger-triangle-bold")
+            end
+        end)
+        if not ok then notify("Server hop failed (API blocked)", "solar:danger-triangle-bold") end
+    end)
+end
+
+local function copyText(text, label)
+    pcall(function() setclipboard(tostring(text)) end)
+    notify(label .. " copied: " .. tostring(text), "solar:copy-bold")
+end
+
+--==================================================================================
+-- BUILD THE WINDOW
+--==================================================================================
+local viewport = Camera and Camera.ViewportSize or Vector2.new(1280, 720)
+local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+
+local Window = WindUI:CreateWindow({
+    Title     = "Khian Hub",
+    Author    = "Normal Run V3",
+    Icon      = "rbxassetid://120997033468887",
+    Folder    = "KhianHubV3",
+    Theme     = "Khian Gray",
+    Size      = UDim2.fromOffset(isMobile and 460 or 620, isMobile and 320 or 420),
+    MinSize   = Vector2.new(420, 280),
+    MaxSize   = Vector2.new(900, 620),
+    Resizable = true,
+    SideBarWidth = isMobile and 150 or 170,
+    ToggleKey = Enum.KeyCode.RightShift,
+    Acrylic   = true,
+    Topbar    = { Height = 46, ButtonsType = "Default" },
+})
+
+pcall(function() WindUI:SetNotificationLower(isMobile) end)
+
+local StatusTag = Window:Tag({
+    Title = T("status_ready"),
+    Color = Color3.fromRGB(0, 255, 160),
+    Border = true,
+})
+
+--==================================================================================
+-- TABS
+--==================================================================================
+local FarmTab = Window:Tab({ Title = T("tab_farm"), Icon = "solar:box-minimalistic-bold" })
+local EggTab  = Window:Tab({ Title = T("tab_egg"),  Icon = "lucide:egg" })
+local CharTab = Window:Tab({ Title = T("tab_char"), Icon = "solar:user-bold" })
+local MoveTab = Window:Tab({ Title = T("tab_move"), Icon = "solar:running-bold" })     -- NEW
+local VisTab  = Window:Tab({ Title = T("tab_vis"),  Icon = "solar:eye-bold" })         -- NEW
+local UtilTab = Window:Tab({ Title = T("tab_util"), Icon = "solar:widget-bold" })      -- NEW
+local SetTab  = Window:Tab({ Title = T("tab_set"),  Icon = "solar:settings-bold" })
+
+--==================================================================================
+-- TAB: AUTO FARM
+--==================================================================================
+local secModes = FarmTab:Section({ Title = T("sec_modes") })
+local suppressMode = false
+
+local togTween
+togTween = secModes:Toggle({
+    Title = T("tog_tween"), Desc = T("desc_tween"), Icon = "solar:compass-bold",
+    Value = false,
+    Callback = function(state)
+        if suppressMode then return end
+        if state then
+            suppressMode = true; togWarp:Set(false); suppressMode = false
+            startFarm("TWEEN")
+            notify("Auto Run (Tween) activated", "solar:check-circle-bold")
+        else
+            if S.autoFarmMode == "TWEEN" then startFarm("NONE"); notify("Auto Run (Tween) deactivated", "solar:x-circle-bold") end
+        end
+    end,
+})
+local togWarp
+togWarp = secModes:Toggle({
+    Title = T("tog_warp"), Desc = T("desc_warp"), Icon = "solar:magic-stick-3-bold",
+    Value = false,
+    Callback = function(state)
+        if suppressMode then return end
+        if state then
+            suppressMode = true; togTween:Set(false); suppressMode = false
+            startFarm("WARP")
+            notify("Auto Run (Teleport) activated", "solar:check-circle-bold")
+        else
+            if S.autoFarmMode == "WARP" then startFarm("NONE"); notify("Auto Run (Teleport) deactivated", "solar:x-circle-bold") end
+        end
+    end,
+})
+secModes:Button({
+    Title = T("btn_single"), Desc = T("desc_single"), Icon = "solar:magic-stick-3-bold",
+    Callback = singleRun,
+})
+secModes:Toggle({
+    Title = T("tog_skipfail"), Desc = T("desc_skipfail"), Icon = "solar:shield-warning-bold",
+    Value = true,
+    Callback = function(state)
+        S.skipFailedEggs = state
+        notify(state and "Skip Failed Eggs enabled — failed eggs will be ignored"
+                      or "Skip Failed Eggs disabled — all eggs are collected",
+            state and "solar:check-circle-bold" or "solar:x-circle-bold")
+    end,
+})
+secModes:Toggle({
+    Title = T("tog_interact"), Desc = T("desc_interact"), Icon = "solar:cursor-bold",
+    Value = false,
+    Callback = function(state)
+        S.autoInteract = state
+        notify(state and "Auto Interact enabled" or "Auto Interact disabled",
+            state and "solar:check-circle-bold" or "solar:x-circle-bold")
+    end,
+})
+
+local secPlace = FarmTab:Section({ Title = T("sec_place") })
+secPlace:Button({ Title = T("btn_place"), Desc = T("desc_place"), Icon = "solar:box-bold", Callback = placeEggs })
+secPlace:Toggle({
+    Title = T("tog_autoplace"), Desc = T("desc_autoplace"), Icon = "solar:box-minimalistic-bold",
+    Value = false,
+    Callback = function(state)
+        S.autoPlaceEvery5 = state
+        if not state then S.batchRunCount = 0 end
+        notify(state and "Auto Place (Every 5) enabled" or "Auto Place (Every 5) disabled",
+            state and "solar:check-circle-bold" or "solar:x-circle-bold")
+    end,
+})
+secPlace:Toggle({
+    Title = T("tog_hatch"), Desc = T("desc_hatch"), Icon = "solar:star-bold",
+    Value = false,
+    Callback = function(state)
+        S.autoHatch = state
+        if state and Remotes.AskHatch then
+            task.spawn(function()
+                while S.autoHatch do
+                    pcall(function() Remotes.AskHatch:InvokeServer() end)
+                    task.wait(2)
+                end
+            end)
+        end
+        notify(state and "Auto Hatch enabled" or "Auto Hatch disabled",
+            state and "solar:check-circle-bold" or "solar:x-circle-bold")
+    end,
+})
+secPlace:Toggle({
+    Title = T("tog_return"), Desc = T("desc_return"), Icon = "solar:undo-left-round-bold",
+    Value = false,
+    Callback = function(state)
+        S.autoGlide = state
+        notify(state and "Auto Return enabled" or "Auto Return disabled",
+            state and "solar:check-circle-bold" or "solar:x-circle-bold")
+    end,
+})
+secPlace:Toggle({
+    Title = T("tog_tread"), Desc = T("desc_tread"), Icon = "solar:running-bold",
+    Value = false,
+    Callback = function(state)
+        S.autoTreadmill = state
+        if state and Remotes.AskDon then pcall(function() Remotes.AskDon:InvokeServer() end) end
+        if not state and Remotes.AskDoff then pcall(function() Remotes.AskDoff:InvokeServer() end) end
+        notify(state and "Auto Treadmill enabled" or "Auto Treadmill disabled",
+            state and "solar:check-circle-bold" or "solar:x-circle-bold")
+    end,
+})
+secPlace:Toggle({
+    Title = T("tog_treadup"), Desc = T("desc_treadup"), Icon = "solar:double-alt-arrow-up-bold",
+    Value = false,
+    Callback = function(state)
+        S.autoUpgradeTreadmill = state
+        if state and Remotes.AskTierRaise then
+            task.spawn(function()
+                while S.autoUpgradeTreadmill do
+                    pcall(function() Remotes.AskTierRaise:InvokeServer() end)
+                    task.wait(3)
+                end
+            end)
+        end
+        notify(state and "Auto Upgrade Treadmill enabled" or "Auto Upgrade Treadmill disabled",
+            state and "solar:check-circle-bold" or "solar:x-circle-bold")
+    end,
+})
+secPlace:Toggle({
+    Title = T("tog_trails"), Desc = T("desc_trails"), Icon = "solar:fire-bold",
+    Value = false,
+    Callback = function(state)
+        S.autoBuyTrails = state
+        if state and Remotes.AskPurchase then
+            task.spawn(function()
+                while S.autoBuyTrails do
+                    pcall(function() Remotes.AskPurchase:InvokeServer() end)
+                    if Remotes.AskChoose then pcall(function() Remotes.AskChoose:InvokeServer() end) end
+                    task.wait(5)
+                end
+            end)
+        end
+        notify(state and "Auto Buy Trails enabled" or "Auto Buy Trails disabled",
+            state and "solar:check-circle-bold" or "solar:x-circle-bold")
+    end,
+})
+secPlace:Toggle({
+    Title = T("tog_hidemoney"), Desc = T("desc_hidemoney"), Icon = "solar:eye-closed-bold",
+    Value = false,
+    Callback = function(state)
+        S.hideNotEnoughMoney = state
+        notify(state and "Hide 'Not Enough Money' enabled" or "Hide 'Not Enough Money' disabled",
+            state and "solar:check-circle-bold" or "solar:x-circle-bold")
+    end,
+})
+
+--==================================================================================
+-- TAB: EGG SELECTION
+--==================================================================================
+local ZONES = {
+    "🟣 Light Dark", "🟡 Titan Temple", "🌸 Cherry Blossom", "🌌 Cosmic",
+    "🦖 Prehistoric", "🌊 Abyss Ocean", "🌋 Volcano", "❄️ Snow",
+    "🌴 Jungle", "🏜️ Desert", "💧 Lake", "🌲 Forest",
+}
+local RARITIES = {
+    "👑 Divine (Tier 6)", "⚡ Eternal (Tier 5)", "🔥 Secret (Tier 4)", "✨ Cosmic (Tier 3)",
+    "🔮 Mythic (Tier 2)", "⭐ Legendary (Tier 1)", "💜 Epic", "🔷 Rare", "🟢 Uncommon", "⚪ Common",
+}
+
+local secZones = EggTab:Section({ Title = T("sec_zones") })
+secZones:Dropdown({
+    Title = T("drop_zones"), Desc = T("desc_zones"),
+    Values = ZONES, Value = {}, Multi = true, AllowNone = true,
+    Callback = function(selected)
+        local set = {}
+        if type(selected) == "table" then
+            for _, v in pairs(selected) do
+                local name = type(v) == "table" and (v.Title or v[1]) or v
+                if name then set[name] = true end
+            end
+        elseif type(selected) == "string" then
+            set[selected] = true
+        end
+        S.selectedZones = set
+    end,
+})
+
+local secRar = EggTab:Section({ Title = T("sec_rarities") })
+secRar:Dropdown({
+    Title = T("drop_rarities"), Desc = T("desc_rarities"),
+    Values = RARITIES, Value = {}, Multi = true, AllowNone = true,
+    Callback = function(selected)
+        local set = {}
+        if type(selected) == "table" then
+            for _, v in pairs(selected) do
+                local name = type(v) == "table" and (v.Title or v[1]) or v
+                if name then set[name] = true end
+            end
+        elseif type(selected) == "string" then
+            set[selected] = true
+        end
+        S.selectedRarities = set
+    end,
+})
+secRar:Toggle({
+    Title = T("tog_secretplus"), Desc = T("desc_secretplus"), Icon = "solar:crown-bold",
+    Value = false,
+    Callback = function(state) S.alwaysSecretPlus = state end,
+})
+
+--==================================================================================
+-- TAB: CHARACTER
+--==================================================================================
+local secSafety = CharTab:Section({ Title = T("sec_safety") })
+secSafety:Toggle({
+    Title = T("tog_god"), Desc = T("desc_god"), Icon = "solar:shield-check-bold",
+    Value = false,
+    Callback = function(state)
+        S.godmode = state
+        setGodmode(state)
+        notify(state and "Godmode enabled" or "Godmode disabled",
+            state and "solar:shield-check-bold" or "solar:shield-off-bold")
+    end,
+})
+secSafety:Button({
+    Title = T("btn_unstick"), Desc = T("desc_unstick"), Icon = "solar:exit-bold",
+    Callback = function()
+        unstick()
+        notify("Unstick request sent successfully!", "solar:check-circle-bold")
+    end,
+})
+
+local secFlight = CharTab:Section({ Title = T("sec_flight") })
+secFlight:Slider({
+    Title = T("slider_speed"), Desc = T("desc_speed"), Step = 25,
+    Value = { Min = 100, Max = 1000, Default = S.glideSpeed },
+    Callback = function(v) S.glideSpeed = v end,
+})
+
+--==================================================================================
+-- TAB: MOVEMENT (NEW)
+--==================================================================================
+local secMove = MoveTab:Section({ Title = T("sec_movement") })
+secMove:Toggle({
+    Title = T("tog_fly"), Desc = T("desc_fly"), Icon = "solar:plain-bold",
+    Value = false,
+    Callback = function(state)
+        S.fly = state
+        if state then startFly() else stopFly() end
+        notify(state and "Fly enabled" or "Fly disabled",
+            state and "solar:check-circle-bold" or "solar:x-circle-bold")
+    end,
+})
+secMove:Slider({
+    Title = T("slider_flyspeed"), Desc = T("desc_flyspeed"), Step = 10,
+    Value = { Min = 20, Max = 500, Default = S.flySpeed },
+    Callback = function(v) S.flySpeed = v end,
+})
+secMove:Toggle({
+    Title = T("tog_noclip"), Desc = T("desc_noclip"), Icon = "solar:ghost-bold",
+    Value = false,
+    Callback = function(state)
+        S.noclip = state
+        setNoclip(state)
+        notify(state and "Noclip enabled" or "Noclip disabled",
+            state and "solar:check-circle-bold" or "solar:x-circle-bold")
+    end,
+})
+secMove:Toggle({
+    Title = T("tog_infjump"), Desc = T("desc_infjump"), Icon = "solar:arrow-up-bold",
+    Value = false,
+    Callback = function(state)
+        S.infiniteJump = state
+        setInfiniteJump(state)
+        notify(state and "Infinite Jump enabled" or "Infinite Jump disabled",
+            state and "solar:check-circle-bold" or "solar:x-circle-bold")
+    end,
+})
+secMove:Slider({
+    Title = T("slider_walkspeed"), Desc = T("desc_walkspeed"), Step = 1,
+    Value = { Min = 16, Max = 500, Default = 16 },
+    Callback = function(v) S.walkSpeed = v; applyWalkSpeed() end,
+})
+secMove:Slider({
+    Title = T("slider_jumppower"), Desc = T("desc_jumppower"), Step = 5,
+    Value = { Min = 50, Max = 500, Default = 50 },
+    Callback = function(v) S.jumpPower = v; applyJumpPower() end,
+})
+
+local secTP = MoveTab:Section({ Title = T("sec_tp") })
+secTP:Toggle({
+    Title = T("tog_clicktp"), Desc = T("desc_clicktp"), Icon = "solar:cursor-bold",
+    Value = false,
+    Callback = function(state)
+        S.clickTeleport = state
+        setClickTP(state)
+        notify(state and "Click Teleport enabled" or "Click Teleport disabled",
+            state and "solar:check-circle-bold" or "solar:x-circle-bold")
+    end,
+})
+secTP:Button({ Title = T("btn_tpspawn"), Desc = T("desc_tpspawn"), Icon = "solar:home-bold", Callback = tpSpawn })
+
+local function playerList()
+    local names = {}
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then table.insert(names, plr.Name) end
+    end
+    return names
+end
+secTP:Dropdown({
+    Title = T("drop_tpplayer"), Desc = T("desc_tpplayer"),
+    Values = playerList(), Value = nil,
+    Callback = function(v)
+        if type(v) == "string" then tpPlayer(v) end
+    end,
+})
+
+--==================================================================================
+-- TAB: VISUALS (NEW)
+--==================================================================================
+local secWorld = VisTab:Section({ Title = T("sec_world") })
+secWorld:Toggle({
+    Title = T("tog_fullbright"), Desc = T("desc_fullbright"), Icon = "solar:sun-bold",
+    Value = false,
+    Callback = function(state)
+        S.fullbright = state
+        setFullbright(state)
+        notify(state and "Fullbright enabled" or "Fullbright disabled",
+            state and "solar:check-circle-bold" or "solar:x-circle-bold")
+    end,
+})
+secWorld:Toggle({
+    Title = T("tog_nofog"), Desc = T("desc_nofog"), Icon = "solar:cloud-cross-bold",
+    Value = false,
+    Callback = function(state)
+        S.removeFog = state
+        setRemoveFog(state)
+        notify(state and "Fog removed" or "Fog restored",
+            state and "solar:check-circle-bold" or "solar:x-circle-bold")
+    end,
+})
+secWorld:Toggle({
+    Title = T("tog_hideothers"), Desc = T("desc_hideothers"), Icon = "solar:users-group-rounded-bold",
+    Value = false,
+    Callback = function(state)
+        S.hideOthers = state
+        setHideOthers(state)
+        notify(state and "Other players hidden" or "Other players visible",
+            state and "solar:check-circle-bold" or "solar:x-circle-bold")
+    end,
+})
+
+local secESP = VisTab:Section({ Title = T("sec_esp") })
+secESP:Toggle({
+    Title = T("tog_esp"), Desc = T("desc_esp"), Icon = "solar:target-bold",
+    Value = false,
+    Callback = function(state)
+        S.playerESP = state
+        setPlayerESP(state)
+        notify(state and "Player ESP enabled" or "Player ESP disabled",
+            state and "solar:check-circle-bold" or "solar:x-circle-bold")
+    end,
+})
+secESP:Toggle({
+    Title = T("tog_eggesp"), Desc = T("desc_eggesp"), Icon = "solar:egg-bold",
+    Value = false,
+    Callback = function(state)
+        S.eggESP = state
+        setEggESP(state)
+        notify(state and "Egg ESP enabled" or "Egg ESP disabled",
+            state and "solar:check-circle-bold" or "solar:x-circle-bold")
+    end,
+})
+
+local secFPS = VisTab:Section({ Title = T("sec_fps") })
+secFPS:Slider({
+    Title = T("slider_fps"), Desc = T("desc_fps"), Step = 5,
+    Value = { Min = 0, Max = 240, Default = 60 },
+    Callback = function(v)
+        pcall(function() setfpscap(v) end)
+    end,
+})
+secFPS:Button({
+    Title = T("btn_cleardecals"), Desc = T("desc_cleardecals"), Icon = "solar:broom-bold",
+    Callback = function()
+        task.spawn(function()
+            pcall(function()
+                for _, d in ipairs(workspace:GetDescendants()) do
+                    if d:IsA("Decal") then d.Transparency = 1 end
+                end
+            end)
+            notify("Terrain decals cleared", "solar:check-circle-bold")
+        end)
+    end,
+})
+
+--==================================================================================
+-- TAB: UTILITY (NEW)
+--==================================================================================
+local secServer = UtilTab:Section({ Title = T("sec_server") })
+secServer:Button({ Title = T("btn_rejoin"), Desc = T("desc_rejoin"), Icon = "solar:logout-2-bold", Callback = rejoin })
+secServer:Button({ Title = T("btn_hop"), Desc = T("desc_hop"), Icon = "solar:refresh-bold", Callback = serverHop })
+secServer:Button({
+    Title = T("btn_jobid"), Desc = T("desc_jobid"), Icon = "solar:copy-bold",
+    Callback = function() copyText(game.JobId, "Job ID") end,
+})
+secServer:Button({
+    Title = T("btn_placeid"), Desc = T("desc_placeid"), Icon = "solar:copy-bold",
+    Callback = function() copyText(game.PlaceId, "Place ID") end,
+})
+
+local secConfig = UtilTab:Section({ Title = T("sec_config") })
+local ConfigManager = Window.ConfigManager
+local ConfigName = "default"
+local AllConfigsDropdown
+
+local ConfigNameInput
+ConfigNameInput = secConfig:Input({
+    Title = T("input_configname"), Desc = T("desc_configname"),
+    Value = "default", Placeholder = "default",
+    Callback = function(v) if v and v ~= "" then ConfigName = v end end,
+})
+
+local function configList()
+    if not ConfigManager then return {} end
+    local ok, list = pcall(function() return ConfigManager:AllConfigs() end)
+    return (ok and list) or {}
+end
+
+AllConfigsDropdown = secConfig:Dropdown({
+    Title = T("drop_configs"), Desc = T("desc_configs"),
+    Values = configList(), Value = nil,
+    Callback = function(v)
+        if type(v) == "string" then
+            ConfigName = v
+            pcall(function() ConfigNameInput:Set(v) end)
+        end
+    end,
+})
+
+secConfig:Button({
+    Title = T("btn_savecfg"), Desc = T("desc_savecfg"), Icon = "solar:diskette-bold",
+    Callback = function()
+        if not ConfigManager then notify("Config system unavailable", "solar:danger-triangle-bold"); return end
+        local ok = pcall(function()
+            Window.CurrentConfig = ConfigManager:Config(ConfigName)
+            Window.CurrentConfig:Save()
+        end)
+        notify(ok and ("Config '" .. ConfigName .. "' saved") or "Failed to save config",
+            ok and "solar:check-circle-bold" or "solar:danger-triangle-bold")
+        pcall(function() AllConfigsDropdown:Refresh(configList()) end)
+    end,
+})
+secConfig:Button({
+    Title = T("btn_loadcfg"), Desc = T("desc_loadcfg"), Icon = "solar:folder-open-bold",
+    Callback = function()
+        if not ConfigManager then notify("Config system unavailable", "solar:danger-triangle-bold"); return end
+        local ok = pcall(function()
+            Window.CurrentConfig = ConfigManager:CreateConfig(ConfigName)
+            Window.CurrentConfig:Load()
+        end)
+        notify(ok and ("Config '" .. ConfigName .. "' loaded") or "Failed to load config",
+            ok and "solar:check-circle-bold" or "solar:danger-triangle-bold")
+    end,
+})
+secConfig:Button({
+    Title = T("btn_delcfg"), Desc = T("desc_delcfg"), Icon = "solar:trash-bin-trash-bold",
+    Callback = function()
+        if not ConfigManager then notify("Config system unavailable", "solar:danger-triangle-bold"); return end
+        local ok = pcall(function() ConfigManager:DeleteConfig(ConfigName) end)
+        notify(ok and ("Config '" .. ConfigName .. "' deleted") or "Failed to delete config",
+            ok and "solar:check-circle-bold" or "solar:danger-triangle-bold")
+        pcall(function() AllConfigsDropdown:Refresh(configList()) end)
+    end,
+})
+
+local secAbout = UtilTab:Section({ Title = T("sec_about") })
+secAbout:Paragraph({ Title = T("para_about"), Desc = T("desc_about") })
+
+--==================================================================================
+-- TAB: SETTINGS
+--==================================================================================
+local secDash = SetTab:Section({ Title = T("sec_dash") })
+local DashPara = secDash:Paragraph({
+    Title = T("para_dash"),
+    Desc = "Status: Ready\nFarm Mode: Idle\nCarried Eggs: 0\nFlight Speed: " .. tostring(S.glideSpeed) .. " Studs/s\nFailed Eggs: Skipped (never delivered)",
+})
+
+local secUI = SetTab:Section({ Title = T("sec_ui") })
+secUI:Dropdown({
+    Title = T("drop_lang"), Values = { "English", "ไทย" }, Value = "English",
+    Callback = function(v)
+        S.language = (v == "ไทย") and "TH" or "EN"
+        notify("Language switched to " .. v, "solar:check-circle-bold")
+    end,
+})
+secUI:Slider({
+    Title = T("slider_transp"), Desc = T("desc_transp"), Step = 5,
+    Value = { Min = 0, Max = 90, Default = 0 },
+    Callback = function(v)
+        pcall(function()
+            local bg = Window.UIElements and Window.UIElements.Main
+            if bg then
+                local b = bg:FindFirstChild("Background")
+                if b then
+                    if b:IsA("ImageLabel") then b.ImageTransparency = v / 100
+                    elseif b:IsA("Frame") then b.BackgroundTransparency = v / 100 end
+                end
+            end
+        end)
+    end,
+})
+secUI:Dropdown({
+    Title = T("drop_theme"),
+    Values = { "Dark", "Light", "Rose", "Plant", "Red", "Indigo", "Sky", "Violet",
+               "Amber", "Emerald", "Midnight", "Crimson", "Monokai Pro", "Cotton Candy",
+               "Mellowsi", "Rainbow" },
+    Value = "Dark",
+    Callback = function(v) pcall(function() WindUI:SetTheme(v) end) end,
+})
+
+local secPerf = SetTab:Section({ Title = T("sec_perf") })
+secPerf:Toggle({
+    Title = T("tog_potato"), Desc = T("desc_potato"), Icon = "solar:bolt-bold",
+    Value = false,
+    Callback = function(state)
+        S.performanceMode = state
+        setPotato(state)
+        notify(state and "Ultra Potato Mode enabled" or "Ultra Potato Mode disabled",
+            state and "solar:check-circle-bold" or "solar:x-circle-bold")
+    end,
+})
+secPerf:Toggle({
+    Title = T("tog_3d"), Desc = T("desc_3d"), Icon = "solar:monitor-camera-bold",
+    Value = false,
+    Callback = function(state)
+        S.disable3D = state
+        set3D(state)
+        notify(state and "3D Rendering disabled (GPU Saver)" or "3D Rendering restored",
+            state and "solar:check-circle-bold" or "solar:x-circle-bold")
+    end,
+})
+
+local secSystem = SetTab:Section({ Title = T("sec_system") })
+secSystem:Toggle({
+    Title = T("tog_afk"), Desc = T("desc_afk"), Icon = "solar:shield-check-bold",
+    Value = false,
+    Callback = function(state)
+        S.antiAFK = state
+        setAntiAFK(state)
+        notify(state and "Anti-AFK enabled" or "Anti-AFK disabled",
+            state and "solar:check-circle-bold" or "solar:x-circle-bold")
+    end,
+})
+secSystem:Button({
+    Title = T("btn_reset"), Desc = T("desc_reset"), Icon = "solar:restart-bold",
+    Callback = function()
+        unstick()
+        notify("Character state reset successfully", "solar:check-circle-bold")
+    end,
+})
+secSystem:Button({
+    Title = T("btn_unload"), Desc = T("desc_unload"), Icon = "solar:trash-bin-trash-bold",
+    Callback = function()
+        S.alive = false
+        stopFly()
+        setNoclip(false)
+        setInfiniteJump(false)
+        setHideOthers(false)
+        setPlayerESP(false)
+        setEggESP(false)
+        setGodmode(false)
+        setAntiAFK(false)
+        setClickTP(false)
+        if farmLoop then task.cancel(farmLoop) end
+        pcall(function() Window:Destroy() end)
+    end,
+})
+
+--==================================================================================
+-- PROXIMITY PROMPT AUTO-INTERACT  (mirrors the original hook)
+--==================================================================================
+pcall(function()
+    ProximityPromptService.PromptButtonHoldBegan:Connect(function(prompt)
+        if S.autoInteract then
+            pcall(function()
+                if typeof(fireproximityprompt) == "function" then
+                    fireproximityprompt(prompt)
+                end
+            end)
+        end
+    end)
+end)
+
+--==================================================================================
+-- BACKGROUND LOOPS
+--==================================================================================
+task.spawn(function()
+    while S.alive do
+        pcall(function()
+            -- status tag
+            local color = Color3.fromRGB(0, 255, 160)
+            local label = S.statusText
+            if S.autoFarmMode == "TWEEN" then label = "Auto Run (Tween)"
+            elseif S.autoFarmMode == "WARP" then label = "Auto Run (Teleport)"
+            elseif S.statusText == "Running" then color = Color3.fromRGB(249, 115, 22)
+            elseif S.statusText == "Searching" then color = Color3.fromRGB(59, 130, 246) end
+            if StatusTag then
+                if StatusTag.SetTitle then StatusTag:SetTitle("Status: " .. label) end
+                if StatusTag.SetColor then StatusTag:SetColor(color) end
+            end
+            -- dashboard
+            local mode = "Idle"
+            if S.autoFarmMode == "TWEEN" then mode = "Auto Run (Tween)"
+            elseif S.autoFarmMode == "WARP" then mode = "Auto Run (Teleport)" end
+            if DashPara and DashPara.SetDesc then
+                DashPara:SetDesc(string.format(
+                    "Status: %s\nFarm Mode: %s\nCarried Eggs: %d\nFlight Speed: %d Studs/s\nFailed Eggs: %s",
+                    S.statusText, mode, S.batchRunCount, S.glideSpeed,
+                    S.skipFailedEggs and "Skipped (never delivered)" or "Collected"))
+            end
+        end)
+        task.wait(0.5)
+    end
+end)
+
+-- keep character settings applied on respawn
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(1)
+    applyWalkSpeed()
+    applyJumpPower()
+    if S.fly then stopFly(); startFly() end
+    if S.godmode then setGodmode(true) end
+end)
+
+--==================================================================================
+-- STARTUP
+--==================================================================================
+notify("Khian Hub V3 loaded — Normal Run Edition", "solar:rocket-bold")
